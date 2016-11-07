@@ -1,5 +1,5 @@
 setwd("D:/data/恒逸ERP数据/data/ExportTables")
-source("D:/code/ERP_dataANA/misc.R")
+source("D:/code/hengyi_ERP/misc.R")
 library(lubridate)
 library(nor1mix)
 library(zoo)
@@ -106,29 +106,30 @@ for(i in 1:nrow(barData)){
 # Stacked Bar Plot with Colors and Legend ========
 barplot(t(barData[1:7,1:2]), main="立即付款 or not (DTY Number)",
         xlab="", col=c("darkblue","red"),
-        legend = c("Yes", "No"))
+        legend = c("Yes", "No"), args.legend = list(x="bottomleft"))
 
 barplot(t(barData[8:11,1:2]), main="立即付款 or not (FDY Number)",
         xlab="", col=c("darkblue","red"),
-        legend = c("Yes", "No"))
+        legend = c("Yes", "No"), args.legend = list(x="bottomleft"))
 
 
 barplot(t(barData[12:16,1:2]), main="立即付款 or not (POY Number)",
         xlab="", col=c("darkblue","red"),
-        legend = c("Yes", "No"))
+        legend = c("Yes", "No"), args.legend = list(x="bottomleft"))
 ### jin e
 
 barplot(t(barData[1:7,3:4]), main="立即付款 or not (DTY amount)",
         xlab="", col=c("darkblue","red"),
-        legend = c("Yes", "No"))
+        legend = c("Yes", "No"), args.legend = list(x="bottomleft"))
 
 barplot(t(barData[8:11,3:4]), main="立即付款 or not (FDY amount)",
         xlab="", col=c("darkblue","red"),
-        legend = c("Yes", "No"))
+        legend = c("Yes", "No"), args.legend = list(x="bottomleft"))
 
 barplot(t(barData[12:16,3:4]), main="立即付款 or not (POY amount)",
         xlab="", col=c("darkblue","red"),
-        legend = c("Yes", "No"))
+        legend = c("Yes", "No"), args.legend = list(x="bottomleft"))
+
 
 ## lijiFukuan zhanbi Bodong =======
 ProdsLevs <- unique(uniProd)
@@ -142,9 +143,12 @@ for(i in 1:length(ProdsLevs)){
                 tosub <- uniProd == ProdsLevs[i]
                 onetoprod <- as.matrix(data0[tosub, c("数量","金额")])
                 toProd <- trans2group(onetoprod,k=2, data0[tosub, "日期"])
-                inter <- intersect(rownames(amProd), rownames(toProd))
-                plot(amProd[inter, 2]/toProd[inter, 2],col=1,main=ProdsLevs[i], type="b", ylab="立即付款 ratio", xlab="", xaxt="n", ylim=c(0,1))
-                text(x=1:length(inter), par("usr")[3]-0.05, labels = inter, srt = 90, pos = 1, xpd = TRUE) 
+                inter <- setdiff(rownames(toProd), rownames(amProd))
+                aa <- matrix(0,length(inter),2, dimnames = list(inter,colnames(amProd)))
+                amProd <- rbind(amProd,aa)
+                ti <- rownames(toProd)
+                plot(amProd[ti, 1]/toProd[, 1],col=1,main=ProdsLevs[i], type="b", ylab="立即付款 ratio", xlab="", xaxt="n", ylim=c(0,1))
+                text(x=1:nrow(toProd), par("usr")[3]-0.1, labels = rownames(toProd), srt = 90, pos = 1, xpd = TRUE) 
         }
 }
 
@@ -193,8 +197,8 @@ save(dkehuList,file="distanceCustomer")
 ## get price index =======
 library(MASS)
 data0 <- read.delim("AllinOne.txt")
-data0[data0[,"金额"] <= 0,"金额"] <- 1
-data0[,"金额"] <- log(data0[,"金额"])
+#data0[data0[,"金额"] <= 0,"金额"] <- 1
+#data0[,"金额"] <- log(data0[,"金额"])
 
 Prods <- c("PTA","DTY","FDY","POY")
 load("distanceCustomer")
@@ -227,24 +231,100 @@ for(i in 1:length(Prods)){
 }
 
 kday <- 7
+ntop <- 5
+inInd <- list()
 for(i in 1:length(Prods)){
         print(i)
         oneD <- dkehuList[[i]]
+        diag(oneD) <- Inf #oneK <- setdiff(oneK, tmp[kk,"客户"])
         tmp <- data0[grepl(Prods[i],data0[,"品种"]), ]
         kehus <- colnames(oneD)
         useDates <- as.Date(tmp[,"日期"])
         
-        kehusL <- lapply(1:length(kehus), function(kk) kehus[oneD[kk, ] <= kdis[i]])
+        #kehusL <- lapply(1:length(kehus), function(kk) kehus[oneD[kk, ] <= kdis[i]]) ##v1
+        kehusL <- lapply(1:length(kehus), function(kk) kehus[rank(oneD[kk, ]) <= ntop]) ##v2
+        
         
         uniDays <- unique(as.character(useDates))
         daysL <- sapply(1:length(uniDays), function(kk) as.character(seq(as.Date(uniDays[kk]) - kday, as.Date(uniDays[kk]) + kday, by="day")))
         colnames(daysL) <- uniDays
         
         prInd <- sapply(1:nrow(tmp), function(kk){
-                #oneK <- setdiff(oneK, tmp[kk,"客户"])
                 onesub <- (tmp[,"日期"] %in% as.character(daysL[,tmp[kk,"日期"]])) & (tmp[,"客户"] %in% kehusL[[ which(tmp[kk,"客户"]==kehus) ]])
                 (tmp[kk,"金额"]/tmp[kk,"数量"])/(mean(tmp[onesub,"金额"]/tmp[onesub,"数量"]))
                 })
         
         plot(prInd,type="l",col=i, main=Prods[i])
+        #plot(density(prInd),col=i)
+        
+        prInd[is.na(prInd)] <- 1
+        u1 <- mean(prInd) + 3*sd(prInd)
+        d1 <- mean(prInd) - 3*sd(prInd)     
+        subind <- which(prInd > u1 | prInd < d1)
+        tmpOut <- tmp[subind, ]
+        prOut <- tmpOut[,"金额"]/(tmpOut[,"数量"]/1000)
+        indOut <- prInd[subind]
+        
+        write.table(cbind(tmpOut, prOut, indOut, subind),file=paste("PriceOutlier/OutlierOrders_In_", Prods[i],".txt",sep=""), quote=FALSE, row.names=FALSE, sep="\t" )
+        
+        inInd[[i]] <- prInd
 }
+save(inInd,file="inInd_V2")
+        
+
+### kehu clusters =======
+data0 <- read.delim("AllinOne.txt")
+data0 <- data0[data0[,"金额"] > 0, ]
+data0[,"金额"] <- log(data0[,"金额"])
+
+Prods <- c("PTA","DTY","FDY","POY")
+dkehuList <- list()
+for(i in 1:length(Prods)){
+        tmp <- data0[grepl(Prods[i],data0[,"品种"]), ]
+        kehus <- unique(tmp[,"客户"])
+        useDates <- as.Date(tmp[,"日期"])
+        useMon <- paste(year(useDates),month(useDates),sep="-")
+        rowMon  <- unique(useMon)
+        print(length(kehus)) 
+        
+        feaKehu <- sapply(1:length(kehus), function(kk){
+                onesub <- tmp[,"客户"]==kehus[kk]
+                oneV <- aggregate(tmp[onesub,"金额"],list(useMon[onesub]),sum)
+                oneV[match(rowMon,oneV[,1]),2]
+        })
+        
+        colnames(feaKehu) <- kehus
+        rownames(feaKehu) <- rowMon
+        print(sum(is.na(feaKehu))/(length(feaKehu)))
+        feaKehu[is.na(feaKehu)] <- 0
+        
+}
+
+
+# oneD <- as.dist(oneD)
+# a <- hclust(oneD)
+# plot(a)
+
+#### PTA number and amount, Price ========
+data0 <- read.delim("AllinOne.txt")
+ptaD <- data0[grepl("PTA",data0[,"品种"]), ]
+
+# del kehu
+kehu <- read.delim("../kehu.txt")
+sefsubs <- grepl("恒逸", kehu[,2]) | grepl("逸盛", kehu[,2])
+sefCode <- kehu[sefsubs, ]
+out1 <- read.delim("PriceOutlier/OutlierOrders_In_PTA.txt")
+tmpsub <- (ptaD[,"客户"] %in% sefCode[,1]) | (ptaD[,"订单"] %in% out1[,"订单"])
+ptaD <- ptaD[!tmpsub, ]
+
+###
+ptaD <- cbind(ptaD, ptaD[,"金额"]/(ptaD[,"数量"]/1000))
+ptaD <- as.matrix(ptaD)
+y1 <- trans2group(ptaD[,10, drop=FALSE],k=2, useDates = ptaD[,2])
+y1 <- y1/1000
+
+y2 <- trans2group(ptaD[,14, drop=FALSE],k=2, useDates = ptaD[,2], f=2)
+
+x <- 1:length(y1)
+R2y(x,y1,y2,"bottomright",legend=c("销量","价格"))
+

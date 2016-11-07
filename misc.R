@@ -14,7 +14,7 @@ write2TableFile <- function(tmp,filename,path="D:/data/ºãÒÝERPÊý¾Ý/data/ExportTa
         write.table(tmp,file = paste(path,filename,sep=""), row.names = FALSE, sep="\t", quote =  FALSE)   
 }
 
-trans2group <- function(data0,k=0, useDates){
+trans2group <- function(data0,k=0, useDates, f=1){
         
         mode(data0) <- "numeric"
         useDates <- as.Date(useDates)
@@ -30,7 +30,10 @@ trans2group <- function(data0,k=0, useDates){
         }
         ws <- unique(gs)
         
-        tmpdata <- sapply(1:ncol(data0), function(i)  sapply(ws, function(ix) sum(data0[gs==ix,i])) )
+        if(f==1) tmpdata <- sapply(1:ncol(data0), function(i)  sapply(ws, function(ix) sum(data0[gs==ix,i])) )
+        
+        if(f==2) tmpdata <- sapply(1:ncol(data0), function(i)  sapply(ws, function(ix) mean(data0[gs==ix,i])) )
+        
         colnames(tmpdata) <- colnames(data0)
         rownames(tmpdata) <- as.character(ws)
         
@@ -126,3 +129,22 @@ topOrders <- function(sefCode,ntop=100){
         
         res
 }
+
+R2y <- function(x,y1,y2,led="topright",legend=c("y1","y2")){
+        
+        par(mar=c(5,4,4,5)+.1)
+        plot(x,y1,type="b",col="red")
+        par(new=TRUE)
+        plot(x, y2,type="b",col="blue",xaxt="n",yaxt="n",xlab="",ylab="")
+        axis(4)
+        mtext("y2",side=4,line=3)
+        legend(led,col=c("red","blue"),lty=1,legend=legend)   
+        
+        
+}
+
+delOutliers <- function(){
+        
+        
+        
+        }
