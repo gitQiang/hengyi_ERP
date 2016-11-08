@@ -130,12 +130,12 @@ topOrders <- function(sefCode,ntop=100){
         res
 }
 
-R2y <- function(x,y1,y2,led="topright",legend=c("y1","y2")){
+R2y <- function(x,y1,y2,led="topright",legend=c("y1","y2"),type="b"){
         
         par(mar=c(5,4,4,5)+.1)
-        plot(x,y1,type="b",col="red")
+        plot(x,y1,type=type,col="red")
         par(new=TRUE)
-        plot(x, y2,type="b",col="blue",xaxt="n",yaxt="n",xlab="",ylab="")
+        plot(x, y2,type=type,col="blue",xaxt="n",yaxt="n",xlab="",ylab="")
         axis(4)
         mtext("y2",side=4,line=3)
         legend(led,col=c("red","blue"),lty=1,legend=legend)   
@@ -144,7 +144,22 @@ R2y <- function(x,y1,y2,led="topright",legend=c("y1","y2")){
 }
 
 delOutliers <- function(){
+        data0 <- read.delim("AllinOne.txt")
+        data0 <- data0[data0[,"金额"] > 0, ]
         
+        kehu <- read.delim("D:/data/恒逸ERP数据/data/kehu.txt")
+        sefsubs <- grepl("恒逸", kehu[,2]) | grepl("逸盛", kehu[,2])
+        sefCode <- kehu[sefsubs, ]
+        data0 <- data0[!(data0[,"客户"] %in% sefCode[,1]), ]
         
-        
+        filenames <- c("PriceOutlier/OutlierOrders_PTA.txt","PriceOutlier/OutlierOrders_FDY.txt","PriceOutlier/OutlierOrders_DTY.txt","PriceOutlier/OutlierOrders_POY.txt")
+        badLab <- c()
+        for(i in 1:length(filenames)){
+                out1 <- read.delim(filenames[i])
+                badLab <- c(badLab, paste(out1[,"客户"], out1[,"订单"],sep="_"))
         }
+        aa1 <- paste(data0[,"客户"], data0[,"订单"],sep="_")
+        data0 <- data0[!(aa1 %in% badLab), ]
+        
+        write.table(data0,file="AllinOneNew.txt",sep="\t",row.names = FALSE,quote = FALSE)
+}

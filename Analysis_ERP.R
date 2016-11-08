@@ -21,39 +21,39 @@ usedate <- rownames(PrV)
 Prods <- colnames(PrV)
 outInd <- list()
 
+u1s <- c(1.397349, 1.62, 1.218344, 1.333677)
+d1s <- c(0.5536494, 0.56,0.52, 0.4192478)
 for(i in 1:ncol(PrV)){
         tmp <- data1[grepl(Prods[i],data1[,"品种"]), ]
         prInd <- tmp[,"金额"]/(tmp[,"数量"]/1000)
         nasub <- is.na(PrV[match(as.character(tmp[,"日期"]), usedate),i])
         tmpsub <- PrV[match(as.character(tmp[,"日期"]), usedate),i]
         prInd[!nasub] <- prInd[!nasub]/tmpsub[!nasub]
-        prInd[nasub] <- NA #mean(prInd[!nasub])
-        prInd <- na.approx(prInd,maxgap = length(prInd))
-        prInd[is.na(prInd)] <- mean(prInd[!is.na(prInd)])
+        prInd[nasub] <- mean(prInd[!nasub])
         NumPTA <- tmp[,"数量"]/1000
         
-        #prInd <- prInd[!nasub]
-        #NumPTA <- NumPTA[!nasub] 
-        
+        plot(density(prInd))
         #print(cor(prInd, NumPTA))
         #print(cor.test(prInd, NumPTA))
         plot(prInd,type="l",col=i, main=Prods[i])
         if(i==3) plot(prInd[prInd<4],type="l",col=i, main=Prods[i])
         print(sum(nasub)/nrow(tmp))
         
-        plot(density(prInd))
         if(i==1){
+                pcut <- 0.001
                 m2 <- norMixMLE(prInd,m=2,trace = 1)
                 xx <- seq(min(prInd),max(prInd),0.0001)
                 res <- dpnorMix(xx,m2)$p
-                pcut <- 0.001
         
                 u1 <- xx[min(which(res > 1-pcut))]
                 d1 <- xx[max(which(res < pcut))]
         }else{
-                u1 <- mean(prInd) + 3*sd(prInd)
-                d1 <- mean(prInd) - 3*sd(prInd)      
+                pcut <- 0.0001
+                u1 <- u1s[i] #quantile(prInd[prInd>0], 1-pcut) #mean(prInd) + 6*sd(prInd)
+                d1 <- d1s[i] #quantile(prInd[prInd>0], pcut)  #mean(prInd) - 6*sd(prInd)      
         }
+        abline(h=d1,lty=2,col=2)
+        abline(h=u1,lty=2,col=2)
         
         subind <- which(prInd > u1 | prInd < d1)
         tmpOut <- tmp[subind, ]
@@ -65,6 +65,31 @@ for(i in 1:ncol(PrV)){
         outInd[[i]] <- prInd
 }
 save(outInd,file="outInd")
+
+
+## time distributions of PTA two normal price index distributions =======
+data1 <- read.delim("AllinOne.txt")
+PrV <- MarketPr()
+usedate <- rownames(PrV)
+Prods <- colnames(PrV)
+outInd <- list()
+u1s <- c(1.397349, 1.62, 1.218344, 1.333677)
+d1s <- c(0.5536494, 0.56,0.52, 0.4192478)
+i=1
+tmp <- data1[grepl(Prods[i],data1[,"品种"]), ]
+prInd <- tmp[,"金额"]/(tmp[,"数量"]/1000)
+nasub <- is.na(PrV[match(as.character(tmp[,"日期"]), usedate),i])
+tmpsub <- PrV[match(as.character(tmp[,"日期"]), usedate),i]
+prInd[!nasub] <- prInd[!nasub]/tmpsub[!nasub]
+prInd[nasub] <- mean(prInd[!nasub])
+NumPTA <- tmp[,"数量"]/1000
+
+plot(density(prInd))
+pcut <- 0.001
+m2 <- norMixMLE(prInd,m=2,trace = 1)
+xx <- seq(min(prInd),max(prInd),0.0001)
+res <- dpnorMix(xx,m2)$p       
+
 
 ## fukuanfangshi biLi, butong chanpin ==========
 data0 <- read.delim("AllinOne.txt")
@@ -130,7 +155,6 @@ barplot(t(barData[12:16,3:4]), main="立即付款 or not (POY amount)",
         xlab="", col=c("darkblue","red"),
         legend = c("Yes", "No"), args.legend = list(x="bottomleft"))
 
-
 ## lijiFukuan zhanbi Bodong =======
 ProdsLevs <- unique(uniProd)
 Prods1 <- uniProd[tmpsub]
@@ -162,7 +186,8 @@ res <- topOrders(sefCode[,1],ntop=100)
 plot(res[[4]][,2],type="p", xlab="", ylab="Ratio")
 
 ## price index without outside data=========
-data0 <- read.delim("AllinOne.txt")
+#data0 <- read.delim("AllinOne.txt")
+data0 <- read.delim("AllinOneNew.txt")
 data0 <- data0[data0[,"金额"] > 0, ]
 data0[,"金额"] <- log(data0[,"金额"])
 
@@ -192,7 +217,7 @@ for(i in 1:length(Prods)){
         dkehuList[[i]] <- dkehu
 }
 
-save(dkehuList,file="distanceCustomer")
+save(dkehuList,file="distanceCustomer_V2")
 
 ## get price index =======
 library(MASS)
@@ -273,20 +298,24 @@ save(inInd,file="inInd_V2")
         
 
 ### kehu clusters =======
-data0 <- read.delim("AllinOne.txt")
-data0 <- data0[data0[,"金额"] > 0, ]
+data0 <- read.delim("AllinOneNew.txt")
 data0[,"金额"] <- log(data0[,"金额"])
+useDates <- as.Date(data0[,"日期"])
+useMon <- paste(year(useDates),month(useDates),sep="-")
+rowMon  <- unique(useMon)
 
 Prods <- c("PTA","DTY","FDY","POY")
-dkehuList <- list()
+kehua <- unique(data0[,"客户"])
+nm <- length(rowMon)
+feaM  <- matrix(0,length(kehua), length(Prods) * nm)
+rownames(feaM) <- kehua
+
 for(i in 1:length(Prods)){
         tmp <- data0[grepl(Prods[i],data0[,"品种"]), ]
         kehus <- unique(tmp[,"客户"])
         useDates <- as.Date(tmp[,"日期"])
         useMon <- paste(year(useDates),month(useDates),sep="-")
-        rowMon  <- unique(useMon)
-        print(length(kehus)) 
-        
+       
         feaKehu <- sapply(1:length(kehus), function(kk){
                 onesub <- tmp[,"客户"]==kehus[kk]
                 oneV <- aggregate(tmp[onesub,"金额"],list(useMon[onesub]),sum)
@@ -298,24 +327,32 @@ for(i in 1:length(Prods)){
         print(sum(is.na(feaKehu))/(length(feaKehu)))
         feaKehu[is.na(feaKehu)] <- 0
         
+        feaM[as.character(kehus), ((i-1)*nm+1):(i*nm)] <- t(feaKehu)
 }
 
+oneD <- dist(feaM)
+disM <- as.matrix(oneD)
+save(oneD,file = "dist_10927")
 
-# oneD <- as.dist(oneD)
-# a <- hclust(oneD)
-# plot(a)
+nc <- 20
+h1 <- hclust(oneD)
+labs <- cutree(h1,k=nc)   
+hierScore <- read.delim("../征信评级.txt",header = FALSE, skip=2)[,c(1,3)]
+kehu <- read.delim("D:/data/恒逸ERP数据/data/kehu.txt")
+cluS <- cbind(rownames(disM),labs)
+
+inNum <- matrix(0,nc,5)
+labC <- c("A","B","C","D","E")
+for(i in 1:nc){
+        for(j in 1:5){
+                tmp <- kehu[match(hierScore[hierScore[,2]==labC[j],1],kehu[,2]),1]
+                inNum[i,j] <- length(intersect(tmp,cluS[labs==as.character(i),1]))        
+        }
+}
 
 #### PTA number and amount, Price ========
-data0 <- read.delim("AllinOne.txt")
+data0 <- read.delim("AllinOneNew.txt")
 ptaD <- data0[grepl("PTA",data0[,"品种"]), ]
-
-# del kehu
-kehu <- read.delim("../kehu.txt")
-sefsubs <- grepl("恒逸", kehu[,2]) | grepl("逸盛", kehu[,2])
-sefCode <- kehu[sefsubs, ]
-out1 <- read.delim("PriceOutlier/OutlierOrders_In_PTA.txt")
-tmpsub <- (ptaD[,"客户"] %in% sefCode[,1]) | (ptaD[,"订单"] %in% out1[,"订单"])
-ptaD <- ptaD[!tmpsub, ]
 
 ###
 ptaD <- cbind(ptaD, ptaD[,"金额"]/(ptaD[,"数量"]/1000))
@@ -327,4 +364,38 @@ y2 <- trans2group(ptaD[,14, drop=FALSE],k=2, useDates = ptaD[,2], f=2)
 
 x <- 1:length(y1)
 R2y(x,y1,y2,"bottomright",legend=c("销量","价格"))
+
+### compare two stages of amount on time, what causes the changes? ========
+
+
+### price index in days ======
+data1 <- read.delim("AllinOne.txt")
+data1 <- data1[data1[,"金额"] > 0, ]
+
+PrV <- MarketPr()
+usedate <- rownames(PrV)
+Prods <- colnames(PrV)
+outIndDay <- list()
+for(i in 1:ncol(PrV)){
+        tmp <- data1[grepl(Prods[i],data1[,"品种"]), ]
+        prInd <- tmp[,"金额"]/(tmp[,"数量"]/1000)
+        nasub <- is.na(PrV[match(as.character(tmp[,"日期"]), usedate),i])
+        tmpsub <- PrV[match(as.character(tmp[,"日期"]), usedate),i]
+        prInd[!nasub] <- prInd[!nasub]/tmpsub[!nasub]
+        prInd[nasub] <- mean(prInd[!nasub])
+        
+        useDates <- as.Date(tmp[,"日期"])
+        useDay <- paste(year(useDates),month(useDates),sep="-") #useDates
+        
+        oneV <- aggregate(prInd,list(useDay), mean)
+        outIndDay[[i]] <- oneV
+        
+        plot(oneV[,2],type="l",col=i, main=Prods[i])
+        abline(h=mean(oneV[,2]),lty=2,col=2)
+        
+        twoV <- aggregate(tmp[,"数量"],list(useDay), sum)
+        R2y(1:nrow(oneV),oneV[,2],twoV[,2],led="topleft",legend=c("PriceInd","Number"),type="l")
+        print(cor.test(oneV[,2],twoV[,2]))
+}
+
 
