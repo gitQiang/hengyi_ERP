@@ -34,17 +34,23 @@ trans2group <- function(data0,k=0, useDates, f=1){
         
         if(f==2) tmpdata <- sapply(1:ncol(data0), function(i)  sapply(ws, function(ix) mean(data0[gs==ix,i])) )
         
+        if(f==3)  tmpdata <- sapply(1:ncol(data0), function(i)  sapply(ws, function(ix) length(unique(data0[gs==ix,i]))) )
+        
         colnames(tmpdata) <- colnames(data0)
         rownames(tmpdata) <- as.character(ws)
         
         tmpdata
 }  
 
-plot2Time <- function(data0,d1="公司",d2="客户"){
+plot2Time <- function(data0,d1="公司",d2="客户",plot=TRUE,k=2){
         gongsi <- unique(data0[,d1])
         n.row <- length(gongsi)
         useDate <- as.Date(data0[,"日期"])
-        DateMon <- paste(year(useDate), month(useDate), sep="-")
+        
+        if(k==1) DateMon <- paste(year(useDate), week(useDate), sep="-")
+        if(k==2) DateMon <- paste(year(useDate), month(useDate), sep="-")
+        if(k==3) DateMon <- paste(year(useDate), quarter(useDate), sep="-")
+        
         shijian <- unique(DateMon)
         n.col <- length(shijian)
         
@@ -56,22 +62,26 @@ plot2Time <- function(data0,d1="公司",d2="客户"){
                                 kehuNum[i,j] <- length(unique(kehuNames))
                         }
                         if(d2 %in% c("数量","金额")){
-                                kehuNum[i,j] <- sum(data0[data0[,d1]==gongsi[i]  & DateMon==shijian[j],d2])
-                                kehuNum[i,j] <- log(kehuNum[i,j])
+                                kehuNum[i,j] <- sum(as.numeric(data0[data0[,d1]==gongsi[i]  & DateMon==shijian[j],d2]))
+                                #kehuNum[i,j] <- log(kehuNum[i,j])
                         }
                 }
         }
-        if(max(kehuNum[n.row, ]) * 10 < max(kehuNum)) kehuNum[n.row, ] <- kehuNum[n.row, ] * 15
         
-        ymax <- 1.2*max(kehuNum)
-        ymin <- 0.9*min(kehuNum)
-        for(i in 1:n.row){
-                if(i==1) plot(kehuNum[i, ], type="b", col=i, ylim = c(ymin, ymax) , xaxt="n", xlab="",ylab="")
-                if(i>1) lines(kehuNum[i,],type="b", col=i)
+        #if(max(kehuNum[n.row, ]) * 10 < max(kehuNum)) kehuNum[n.row, ] <- kehuNum[n.row, ] * 15
+        
+        if(plot){
+                ymax <- 1.2*max(kehuNum)
+                ymin <- 0.9*min(kehuNum)
+                for(i in 1:n.row){
+                        if(i==1) plot(kehuNum[i, ], type="b", col=i, ylim = c(ymin, ymax) , xaxt="n", xlab="",ylab="")
+                        if(i>1) lines(kehuNum[i,],type="b", col=i)
+                }
+                legend("topleft",legend = gongsi, col = 1:n.row, lwd=2, lty=1)
+                text(x=c(seq(6,n.col-8,length.out = 3), n.col-1), par("usr")[3]-0.051*(ymax-ymin), labels = 2013:2016, srt = 0, pos = 1, xpd = TRUE)
         }
-        legend("topleft",legend = gongsi, col = 1:n.row, lwd=2, lty=1)
-        text(x=c(seq(6,n.col-8,length.out = 3), n.col-1), par("usr")[3]-0.051*(ymax-ymin), labels = 2013:2016, srt = 0, pos = 1, xpd = TRUE)        
         
+        kehuNum
 }
 
 MarketPr <- function(){
@@ -130,17 +140,16 @@ topOrders <- function(sefCode,ntop=100){
         res
 }
 
-R2y <- function(x,y1,y2,led="topright",legend=c("y1","y2"),type="b"){
+R2y <- function(x,y1,y2,led="topright",legend=c("y1","y2"),type="b",xlab=""){
         
         par(mar=c(5,4,4,5)+.1)
-        plot(x,y1,type=type,col="red")
+        plot(x,y1,type=type,col="red",ylab=legend[1],xlab=xlab)
         par(new=TRUE)
-        plot(x, y2,type=type,col="blue",xaxt="n",yaxt="n",xlab="",ylab="")
+        plot(x,y2,type=type,col="blue",xaxt="n",yaxt="n",xlab="",ylab="")
         axis(4)
-        mtext("y2",side=4,line=3)
+        mtext(legend[2],side=4,line=3)
         legend(led,col=c("red","blue"),lty=1,legend=legend)   
-        
-        
+
 }
 
 delOutliers <- function(){

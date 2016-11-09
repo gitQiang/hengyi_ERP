@@ -1,4 +1,5 @@
 setwd("D:/data/恒逸ERP数据/data/ExportTables")
+options(stringsAsFactors = FALSE)
 source("D:/code/hengyi_ERP/misc.R")
 library(lubridate)
 library(nor1mix)
@@ -66,15 +67,12 @@ for(i in 1:ncol(PrV)){
 }
 save(outInd,file="outInd")
 
-
 ## time distributions of PTA two normal price index distributions =======
 data1 <- read.delim("AllinOne.txt")
 PrV <- MarketPr()
 usedate <- rownames(PrV)
 Prods <- colnames(PrV)
-outInd <- list()
-u1s <- c(1.397349, 1.62, 1.218344, 1.333677)
-d1s <- c(0.5536494, 0.56,0.52, 0.4192478)
+
 i=1
 tmp <- data1[grepl(Prods[i],data1[,"品种"]), ]
 prInd <- tmp[,"金额"]/(tmp[,"数量"]/1000)
@@ -82,14 +80,20 @@ nasub <- is.na(PrV[match(as.character(tmp[,"日期"]), usedate),i])
 tmpsub <- PrV[match(as.character(tmp[,"日期"]), usedate),i]
 prInd[!nasub] <- prInd[!nasub]/tmpsub[!nasub]
 prInd[nasub] <- mean(prInd[!nasub])
-NumPTA <- tmp[,"数量"]/1000
 
-plot(density(prInd))
-pcut <- 0.001
-m2 <- norMixMLE(prInd,m=2,trace = 1)
-xx <- seq(min(prInd),max(prInd),0.0001)
-res <- dpnorMix(xx,m2)$p       
+# aa <- prInd
+# aa <- aa[aa>0.7 & aa<1.2]
+# m2 <- norMixMLE(aa,m=3,trace = 1)
+# plot(density(aa))
+# abline(v=m2[1,1])
+# abline(v=m2[2,1],col=2)
+# abline(v=m2[3,1],col=3)
 
+useDates <- as.Date(tmp[,"日期"])
+useDay <- paste(year(useDates),quarter(useDates),sep="-") #useDates
+oneV <- aggregate(prInd,list(useDay), mean)
+
+plot(oneV[,2],type="l",col=i, main=Prods[i])
 
 ## fukuanfangshi biLi, butong chanpin ==========
 data0 <- read.delim("AllinOne.txt")
@@ -334,10 +338,14 @@ oneD <- dist(feaM)
 disM <- as.matrix(oneD)
 save(oneD,file = "dist_10927")
 
-nc <- 20
+
+###  
+load("dist_10927")
+disM <- as.matrix(oneD)
+nc <- 200
 h1 <- hclust(oneD)
 labs <- cutree(h1,k=nc)   
-hierScore <- read.delim("../征信评级.txt",header = FALSE, skip=2)[,c(1,3)]
+hierScore <- read.delim("D:/data/恒逸ERP数据/data/hengyi_diaoyan1316_rating_composite.txt")[ ,c(2,9)] #read.delim("../征信评级.txt",header = FALSE, skip=2)[,c(1,3)]
 kehu <- read.delim("D:/data/恒逸ERP数据/data/kehu.txt")
 cluS <- cbind(rownames(disM),labs)
 
@@ -345,10 +353,12 @@ inNum <- matrix(0,nc,5)
 labC <- c("A","B","C","D","E")
 for(i in 1:nc){
         for(j in 1:5){
-                tmp <- kehu[match(hierScore[hierScore[,2]==labC[j],1],kehu[,2]),1]
-                inNum[i,j] <- length(intersect(tmp,cluS[labs==as.character(i),1]))        
+                #tmp <- kehu[match(hierScore[hierScore[,2]==labC[j],1],kehu[,2]),1]
+                #inNum[i,j] <- length(intersect(tmp,cluS[labs==as.character(i),1]))
+                inNum[i,j] <- length(intersect(hierScore[hierScore[,2]==labC[j],1],cluS[labs==as.character(i),1]))    
         }
 }
+
 
 #### PTA number and amount, Price ========
 data0 <- read.delim("AllinOneNew.txt")
@@ -357,16 +367,103 @@ ptaD <- data0[grepl("PTA",data0[,"品种"]), ]
 ###
 ptaD <- cbind(ptaD, ptaD[,"金额"]/(ptaD[,"数量"]/1000))
 ptaD <- as.matrix(ptaD)
-y1 <- trans2group(ptaD[,10, drop=FALSE],k=2, useDates = ptaD[,2])
+
+y1 <- trans2group(ptaD[,8, drop=FALSE],k=2, useDates = ptaD[,2])
 y1 <- y1/1000
-
 y2 <- trans2group(ptaD[,14, drop=FALSE],k=2, useDates = ptaD[,2], f=2)
-
 x <- 1:length(y1)
 R2y(x,y1,y2,"bottomright",legend=c("销量","价格"))
+abline(v=26,col=2,lwd=2,lty=2)
+
+y1 <- trans2group(ptaD[,10, drop=FALSE],k=2, useDates = ptaD[,2])
+R2y(x,y1,y2,"bottomright",legend=c("金额","价格"))
+abline(v=26,col=2,lwd=2,lty=2)
+## find the change point
+chp <- which.min(y1[1:36])
+rownames(y1)[chp]
 
 ### compare two stages of amount on time, what causes the changes? ========
+y1 <- trans2group(ptaD[,"客户", drop=FALSE],k=2, useDates = ptaD[,2],f=3)
+y2 <- trans2group(ptaD[,"订单", drop=FALSE],k=2, useDates = ptaD[,2],f=3)
+x <- 1:length(y1)
+R2y(x,y1,y2,"bottomleft",legend=c("客户数","订单数"))
+abline(v=chp,col=2,lwd=2,lty=2)
 
+useDates <- as.Date(ptaD[,"日期"])
+useDay <- paste(year(useDates),month(useDates),sep="-") 
+uniDay <- unique(useDay)
+nm <- length(uniDay)
+nd <- 1:(nm-1)
+for(i in 2:nm){
+        tmp1 <- unique(ptaD[useDay==uniDay[i-1],"客户"])
+        tmp2 <- unique(ptaD[useDay==uniDay[i],"客户"])
+        nd[i-1] <- length(setdiff(tmp2,tmp1))
+}
+y3 <- c(0,nd)
+R2y(x,y1,y3,"bottomleft",legend=c("客户数","不同客户数"))
+abline(v=chp,col=2,lwd=2,lty=2)
+
+## new customer and old customers =========
+chp1 <- 24
+set0 <- c()
+for(i in 1:chp1){
+        tmp1 <- unique(ptaD[useDay==uniDay[i],"客户"])
+        set0 <- union(set0,tmp1)
+}
+set1 <- c()
+for(i in (chp1+1):nm){
+        tmp1 <- unique(ptaD[useDay==uniDay[i],"客户"])
+        set1 <- union(set1,tmp1)
+}
+set1 <- setdiff(set1,set0)
+
+labK <- 1:nrow(ptaD)
+labK[ptaD[,"客户"] %in% set0] <- 1
+labK[ptaD[,"客户"] %in% set1] <- 2
+
+y1 <- aggregate(as.numeric(ptaD[labK==1,"数量"]), list(useDay[labK==1]), sum)[,2]
+y2 <- aggregate(as.numeric(ptaD[labK==2,"数量"]), list(useDay[labK==2]), sum)[,2]
+y2 <- c(rep(0,length(y1)-length(y2)), y2)
+x <- 1:length(y1)
+R2y(x,y1,y2,"bottomleft",legend=c("旧客户","新客户"))
+abline(v=chp,col=2,lwd=2,lty=2)
+
+y1 <- aggregate(as.numeric(ptaD[labK==1,"金额"]), list(useDay[labK==1]), sum)[,2]
+y2 <- aggregate(as.numeric(ptaD[labK==2,"金额"]), list(useDay[labK==2]), sum)[,2]
+y2 <- c(rep(0,length(y1)-length(y2)), y2)
+x <- 1:length(y1)
+yr <- y1/(y1+y2)
+
+R2y(x,yr,1-yr,"bottomleft",legend=c("旧客户","新客户"))
+abline(v=chp,col=2,lwd=2,lty=2)
+
+barplot(t(cbind(yr,1-yr)), main="旧客户 VS 新客户",
+        xlab="", col=c("darkblue","red"),
+        legend = c("Old", "New"), args.legend = list(x="bottomleft"))
+
+## customers mean and variance distritbuions across three years========
+tmpM <- plot2Time(ptaD,d1="客户",d2="金额",plot=FALSE,k=3)
+y1 <- apply(tmpM,1,mean)
+y2 <- apply(tmpM,1,sd)
+hist(y1,main="mean distribution of customers")
+hist(y2,main="variance distribution of customers")
+hist(y2/y1,main="Index of dispersion of customers")
+
+
+## scores in fengcengfenji and scores in zhengxinpingji=======
+kehu <- read.delim("D:/data/恒逸ERP数据/data/kehu.txt")
+score1 <- read.delim("D:/data/恒逸ERP数据/data/hengyi_diaoyan1316_rating_composite.txt")
+score2 <- read.delim("D:/data/恒逸ERP数据/data/征信评级.txt",skip=2,header = FALSE)
+
+sv1 <- score1[,c(2,8)]
+sv2 <- cbind(as.character(kehu[match(score2[,1],kehu[,2]),1]), score2[,2])
+
+csv <- intersect(sv1[,1],sv2[,1])
+cor.test(as.numeric(sv1[match(csv,sv1[,1]),2]), as.numeric(sv2[match(csv,sv2[,1]),2]))
+
+table(score1[score1[,"customer"] %in% set1, 9])
+
+table(score2[score2[ ,1] %in% kehu[match(set1,kehu[,1]), 2], 3])
 
 ### price index in days ======
 data1 <- read.delim("AllinOne.txt")
