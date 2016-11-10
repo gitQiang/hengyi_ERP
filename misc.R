@@ -140,10 +140,11 @@ topOrders <- function(sefCode,ntop=100){
         res
 }
 
-R2y <- function(x,y1,y2,led="topright",legend=c("y1","y2"),type="b",xlab=""){
+R2y <- function(x,y1,y2,led="topright",legend=c("y1","y2"),type="b",xlab="",main="",abl=FALSE){
         
         par(mar=c(5,4,4,5)+.1)
-        plot(x,y1,type=type,col="red",ylab=legend[1],xlab=xlab)
+        plot(x,y1,type=type,col="red",ylab=legend[1],xlab=xlab,main=main)
+        if(abl) abline(h=mean(y1),lty=2,col=2,lwd=2)
         par(new=TRUE)
         plot(x,y2,type=type,col="blue",xaxt="n",yaxt="n",xlab="",ylab="")
         axis(4)

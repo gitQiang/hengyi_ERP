@@ -132,7 +132,7 @@ for(i in 1:nrow(barData)){
         barData[i,3:4] <- barData[i,3:4]/sum(barData[i,3:4])
 }
 
-# Stacked Bar Plot with Colors and Legend ========
+## Stacked Bar Plot with Colors and Legend ========
 barplot(t(barData[1:7,1:2]), main="立即付款 or not (DTY Number)",
         xlab="", col=c("darkblue","red"),
         legend = c("Yes", "No"), args.legend = list(x="bottomleft"))
@@ -305,7 +305,7 @@ save(inInd,file="inInd_V2")
 data0 <- read.delim("AllinOneNew.txt")
 data0[,"金额"] <- log(data0[,"金额"])
 useDates <- as.Date(data0[,"日期"])
-useMon <- paste(year(useDates),month(useDates),sep="-")
+useMon <- paste(year(useDates),quarter(useDates),sep="-")
 rowMon  <- unique(useMon)
 
 Prods <- c("PTA","DTY","FDY","POY")
@@ -342,7 +342,7 @@ save(oneD,file = "dist_10927")
 ###  
 load("dist_10927")
 disM <- as.matrix(oneD)
-nc <- 200
+nc <- 10
 h1 <- hclust(oneD)
 labs <- cutree(h1,k=nc)   
 hierScore <- read.delim("D:/data/恒逸ERP数据/data/hengyi_diaoyan1316_rating_composite.txt")[ ,c(2,9)] #read.delim("../征信评级.txt",header = FALSE, skip=2)[,c(1,3)]
@@ -355,10 +355,27 @@ for(i in 1:nc){
         for(j in 1:5){
                 #tmp <- kehu[match(hierScore[hierScore[,2]==labC[j],1],kehu[,2]),1]
                 #inNum[i,j] <- length(intersect(tmp,cluS[labs==as.character(i),1]))
-                inNum[i,j] <- length(intersect(hierScore[hierScore[,2]==labC[j],1],cluS[labs==as.character(i),1]))    
+                inNum[i,j] <- length(intersect(hierScore[hierScore[,2]==labC[j],1],cluS[labs==as.character(i),1]))/length(union(hierScore[hierScore[,2]==labC[j],1],cluS[labs==as.character(i),1]))     
         }
 }
 
+aa <- table(hierScore[,2])
+bb <- rownames(disM)[h1$order]
+k=1
+inv <- 1:5
+for(i in 1:5){
+        n1 <- round(length(bb)*aa[i]/nrow(hierScore))
+        inv[i] <- length(intersect(bb[k:(k+n1-1)],hierScore[hierScore[,2]==labC[i],1] ))
+        k <- k+n1
+}
+cor(inv,aa) # 0.9227714
+
+hierOrder <- read.delim("D:/data/恒逸ERP数据/data/hengyi_diaoyan1316_rating_composite.txt")[ ,c(2,8,9)]
+hierOrder <- hierOrder[match(rownames(disM),hierOrder[,1]), ]
+tmp <- sort(hierOrder[,2],decreasing = TRUE, index.return=TRUE)
+o2 <- tmp$ix
+o1 <- h1$order
+wilcox.test(o1,o2)
 
 #### PTA number and amount, Price ========
 data0 <- read.delim("AllinOneNew.txt")
@@ -442,13 +459,16 @@ barplot(t(cbind(yr,1-yr)), main="旧客户 VS 新客户",
         legend = c("Old", "New"), args.legend = list(x="bottomleft"))
 
 ## customers mean and variance distritbuions across three years========
-tmpM <- plot2Time(ptaD,d1="客户",d2="金额",plot=FALSE,k=3)
+tmpM <- plot2Time(ptaD,d1="客户",d2="金额",plot=FALSE,k=2)
 y1 <- apply(tmpM,1,mean)
 y2 <- apply(tmpM,1,sd)
 hist(y1,main="mean distribution of customers")
 hist(y2,main="variance distribution of customers")
 hist(y2/y1,main="Index of dispersion of customers")
 
+tmpM <- plot2Time(ptaD,d1="客户",d2="金额",plot=FALSE,k=2)
+plot(tmpM[5,],type="b",col=1,xlab="时间", ylab="金额", main="浙江双兔新材料有限公司
+")
 
 ## scores in fengcengfenji and scores in zhengxinpingji=======
 kehu <- read.delim("D:/data/恒逸ERP数据/data/kehu.txt")
@@ -466,7 +486,7 @@ table(score1[score1[,"customer"] %in% set1, 9])
 table(score2[score2[ ,1] %in% kehu[match(set1,kehu[,1]), 2], 3])
 
 ### price index in days ======
-data1 <- read.delim("AllinOne.txt")
+data1 <- read.delim("AllinOneNew.txt")
 data1 <- data1[data1[,"金额"] > 0, ]
 
 PrV <- MarketPr()
@@ -482,7 +502,7 @@ for(i in 1:ncol(PrV)){
         prInd[nasub] <- mean(prInd[!nasub])
         
         useDates <- as.Date(tmp[,"日期"])
-        useDay <- paste(year(useDates),month(useDates),sep="-") #useDates
+        useDay <- paste(year(useDates),week(useDates),sep="-") #useDates
         
         oneV <- aggregate(prInd,list(useDay), mean)
         outIndDay[[i]] <- oneV
@@ -491,8 +511,65 @@ for(i in 1:ncol(PrV)){
         abline(h=mean(oneV[,2]),lty=2,col=2)
         
         twoV <- aggregate(tmp[,"数量"],list(useDay), sum)
-        R2y(1:nrow(oneV),oneV[,2],twoV[,2],led="topleft",legend=c("PriceInd","Number"),type="l")
+        R2y(1:nrow(oneV),oneV[,2],twoV[,2]*oneV[,2],led="bottomleft",legend=c("PriceInd","amount"),type="l",abl=TRUE)
         print(cor.test(oneV[,2],twoV[,2]))
 }
+
+### best prind for hengyi and one month yujing ========
+data1 <- read.delim("AllinOneNew.txt")
+data1 <- data1[data1[,"金额"] > 0, ]
+
+PrV <- MarketPr()
+usedate <- rownames(PrV)
+Prods <- colnames(PrV)
+i=1
+
+tmp <- data1[grepl(Prods[i],data1[,"品种"]), ]
+prInd <- tmp[,"金额"]/(tmp[,"数量"]/1000)
+nasub <- is.na(PrV[match(as.character(tmp[,"日期"]), usedate),i])
+tmpsub <- PrV[match(as.character(tmp[,"日期"]), usedate),i]
+prInd[!nasub] <- prInd[!nasub]/tmpsub[!nasub]
+prInd[nasub] <- mean(prInd[!nasub])
+
+useDates <- as.Date(tmp[,"日期"])
+useDay <- paste(year(useDates),week(useDates),sep="-") #useDates
+
+oneV <- aggregate(prInd,list(useDay), mean)
+b0 <- mean(oneV[,2])
+twoV <- aggregate(tmp[,"金额"],list(useDay), sum)
+
+a1 <- oneV[,2] #sapply( 1:(nrow(oneV)-4), function(i) mean(oneV[i:(i+4),2]))
+b1 <- twoV[,2] #sapply( 1:(nrow(twoV)-4), function(i) mean(twoV[i:(i+4),2]))
+
+a2 <- diff(a1)
+b2 <- diff(log(b1))
+y <- b2/abs(a2)
+asub <- sort(a1[-length(a1)],index.return=TRUE)$ix
+plot(a1[asub],y[asub],xlab="Price Index",ylab="Amount",type="l",col=2)
+
+x1 <- a1[asub]
+y1 <- y[asub]
+chpi <- x1[which.max(y1)]
+sdi <- sd(oneV[,2])
+ui <- chpi + sdi
+di <- chpi - sdi
+
+0.951678
+0.8751118
+
+## gou mai zhouqi estimate ======
+data0 <- read.delim("AllinOneNew.txt")
+ptaD <- data0[grepl("PTA",data0[,"品种"]), ]
+ptaD <- as.matrix(ptaD)
+kehupta <- unique(ptaD[,"客户"])
+tmp <- sapply(kehupta, function(i){ 
+        #print(i)
+        a <- ptaD[ptaD[,"客户"]==i, ,drop=FALSE]
+        a <- a[!duplicated(a[,"日期"]), ,drop=FALSE]
+        mean(diff(as.Date(a[,"日期"])))
+             })
+plot(density(tmp[!is.na(tmp)]))
+hist(tmp[!is.na(tmp)],20)
+median(tmp[!is.na(tmp)])
 
 
