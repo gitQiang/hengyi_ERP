@@ -1,6 +1,7 @@
 setwd("D:/data/恒逸ERP数据/data/ExportTables")
 options(stringsAsFactors = FALSE)
 source("D:/code/hengyi_ERP/misc.R")
+source("D:/code/hengyi_ERP/GM11.R")
 library(lubridate)
 library(nor1mix)
 library(zoo)
@@ -451,12 +452,22 @@ y2 <- c(rep(0,length(y1)-length(y2)), y2)
 x <- 1:length(y1)
 yr <- y1/(y1+y2)
 
-R2y(x,yr,1-yr,"bottomleft",legend=c("旧客户","新客户"))
+R2y(x,yr,1-yr,"bottomleft",legend=c("旧客户","新客户"),y1lim=c(0,1), y2lim=c(0,1))
 abline(v=chp,col=2,lwd=2,lty=2)
 
 barplot(t(cbind(yr,1-yr)), main="旧客户 VS 新客户",
         xlab="", col=c("darkblue","red"),
         legend = c("Old", "New"), args.legend = list(x="bottomleft"))
+
+
+## average number of new and old customers
+y1 <- aggregate(as.numeric(ptaD[labK==1,"数量"]), list(ptaD[labK==1,"客户"]), mean)[,2]
+y2 <- aggregate(as.numeric(ptaD[labK==2,"数量"]), list(ptaD[labK==2,"客户"]), mean)[,2]
+
+t.test(y1,y2)
+plot(density(y1),col=1,xlab="Number",main="")
+lines(density(y2),col=2)
+legend("topright",legend=c("Old","New"),lty=1,lwd=2,col=c(1,2))
 
 ## customers mean and variance distritbuions across three years========
 tmpM <- plot2Time(ptaD,d1="客户",d2="金额",plot=FALSE,k=2)
@@ -484,6 +495,10 @@ cor.test(as.numeric(sv1[match(csv,sv1[,1]),2]), as.numeric(sv2[match(csv,sv2[,1]
 table(score1[score1[,"customer"] %in% set1, 9])
 
 table(score2[score2[ ,1] %in% kehu[match(set1,kehu[,1]), 2], 3])
+
+table(score1[score1[,"customer"] %in% set0, 9])
+
+table(score2[score2[ ,1] %in% kehu[match(set0,kehu[,1]), 2], 3])
 
 ### price index in days ======
 data1 <- read.delim("AllinOneNew.txt")
@@ -545,7 +560,7 @@ a2 <- diff(a1)
 b2 <- diff(log(b1))
 y <- b2/abs(a2)
 asub <- sort(a1[-length(a1)],index.return=TRUE)$ix
-plot(a1[asub],y[asub],xlab="Price Index",ylab="Amount",type="l",col=2)
+plot(a1[asub],y[asub],xlab="Price Index",ylab="Amount_d/Index_d",type="l",col=2)
 
 x1 <- a1[asub]
 y1 <- y[asub]
@@ -557,7 +572,7 @@ di <- chpi - sdi
 0.951678
 0.8751118
 
-## gou mai zhouqi estimate ======
+## cusotomer buy period estimate ======
 data0 <- read.delim("AllinOneNew.txt")
 ptaD <- data0[grepl("PTA",data0[,"品种"]), ]
 ptaD <- as.matrix(ptaD)
@@ -565,11 +580,137 @@ kehupta <- unique(ptaD[,"客户"])
 tmp <- sapply(kehupta, function(i){ 
         #print(i)
         a <- ptaD[ptaD[,"客户"]==i, ,drop=FALSE]
-        a <- a[!duplicated(a[,"日期"]), ,drop=FALSE]
-        mean(diff(as.Date(a[,"日期"])))
+        a <- a[!duplicated(a[,"订单"]), ,drop=FALSE]
+        max(diff(as.Date(a[,"日期"])))
              })
 plot(density(tmp[!is.na(tmp)]))
 hist(tmp[!is.na(tmp)],20)
 median(tmp[!is.na(tmp)])
 
+#公司   日期         客户     订单     
+#335128 "A000" "2013-11-22" "313666" 
+#335351 "A000" "2013-12-31" "313666"
+#341554 "A000" "2016-01-26" "313666"
 
+## 活跃客户的生命周期
+## the order number distributions of each customer in each year
+ordDis <- c()
+ordList <- list()
+k=1
+for(i in 2013:2015){
+        tmp <- ptaD[grepl(as.character(i),ptaD[,"日期"]), ]
+        kehutmp <- unique(tmp[,"客户"])
+        numkehu <- sapply(kehutmp, function(ii) length(unique(tmp[tmp[,"客户"]==ii,"订单"])))
+        ordDis <- c(ordDis,numkehu)
+        ordList[[k]] <- numkehu
+        k <- k+1
+}
+
+options(warn=-1)
+ks.test(ordList[[2]],ordList[[1]],alternative = "greater")$p.value
+ks.test(ordList[[1]],ordList[[2]],alternative = "greater")$p.value
+
+ks.test(ordList[[2]],ordList[[3]],alternative = "greater")$p.value
+ks.test(ordList[[3]],ordList[[2]],alternative = "greater")$p.value
+
+ks.test(ordList[[1]],ordList[[3]],alternative = "greater")$p.value
+ks.test(ordList[[3]],ordList[[1]],alternative = "greater")$p.value
+options(warn=0)
+
+plot(density(ordDis))
+table(ordDis)
+
+nkehu <- rep(0,20)
+n <- length(ordDis)
+for(i in 1:20) nkehu[i] <- sum(ordDis >= i)/n
+plot(nkehu,ylim=c(0,1), xlab = "order number", ylab="Fraction of customers")
+
+
+kehuA <- unique(ptaD[,"客户"])
+numkehuY <- matrix(0,length(kehuA),3)
+rownames(numkehuY) <- kehuA
+
+k=1
+for(i in 2013:2015){
+        tmp <- ptaD[grepl(as.character(i),ptaD[,"日期"]), ]
+        kehutmp <- unique(tmp[,"客户"])
+        numtmp <- sapply(kehutmp, function(ii) length(unique(tmp[tmp[,"客户"]==ii,"订单"])))
+        numkehuY[kehutmp,k] <- numtmp
+        k <- k+1
+}
+
+noactive <- kehuA[rowMeans(numkehuY) < 2]
+kehu <- read.delim("../kehu.txt")
+nokehu <- kehu[match(noactive,kehu[,1]), ]
+write.table(nokehu,file="non-activeList.txt",sep="\t",quote=FALSE,row.names=FALSE)
+
+## customers unit value ======
+data0 <- read.delim("AllinOneNew.txt")
+ptaD <- data0[grepl("PTA",data0[,"品种"]), ]
+ptaD <- as.matrix(ptaD)
+
+tmp <- aggregate(as.numeric(ptaD[,"金额"]), list(ptaD[,"客户"]), sum)
+tmp  <- cbind(tmp, tmp[,2]/(10000*38))
+
+plot(density(tmp[,3]))
+hist(log(tmp[,3]),20)
+
+top10PTA <- tmp[rank(- tmp[,2]) <= 10, 1]
+write.table(top10PTA,file="top10PTA.txt",col.names = FALSE, row.names = FALSE, quote = FALSE)
+
+## orders for POY ======
+data0 <- read.delim("AllinOne.txt")
+poyD <- data0 #[grepl("POY",data0[,"品种"]), ]
+
+nrows <- nrow(poyD)
+norder <- length(unique(poyD[,"订单"]))
+
+zerosub <- which(poyD[,"金额"] == 0)
+poyDzero <- poyD[zerosub, ]
+#poyDzero[1:10, ]
+#one1 <- which(poyDzero["付款方式"]=="立即付款")
+#poyDzero[one1, ]
+tmp <- poyD[poyD[,"金额"] > 0, ]
+nordV <- sapply(1:nrow(poyDzero), function(ii) sum(tmp[,"订单"]==poyDzero[ii,"订单"]))
+
+length(unique(poyDzero[,"订单"])) ## 161/ 3766
+table(nordV)
+
+## 产品销量变化、 占比、波动率变化 ==========
+data0 <- read.delim("AllinOneNew.txt")
+ptaD <- data0[grepl("PTA",data0[,"品种"]), ]
+ptaD <- as.matrix(ptaD)
+
+useDates <- as.Date(ptaD[,"日期"])
+useDay <- paste(year(useDates),month(useDates),sep="-") 
+tmp <- aggregate(as.numeric(ptaD[,"数量"]), list(useDay), sum)
+plot(1:nrow(tmp),tmp[,2],type="b",ylab="Number",xlab="Month",main="")
+abline(v=c(12,24,36),col=2,lty=2,lwd=2)
+
+useDates <- as.Date(ptaD[,"日期"])
+useDay <- paste(year(useDates),quarter(useDates),sep="-") 
+tmp <- aggregate(as.numeric(ptaD[,"数量"]), list(useDay), sum)
+plot(1:nrow(tmp),tmp[,2],type="b",ylab="Number",xlab="Season",main="")
+abline(v=c(4,8,12),col=2,lty=2,lwd=2)
+
+
+top10pta <- unlist(read.table("top10PTA.txt"))
+
+useDates <- as.Date(ptaD[,"日期"])
+useDay <- paste(year(useDates),month(useDates),sep="-") 
+
+for(i in 1:length(top10pta)){
+        onesub <- which(ptaD[,"客户"]==top10pta[i])
+        tmp <- aggregate(as.numeric(ptaD[onesub,"数量"]), list(useDay[onesub]), sum)
+        #plot(1:nrow(tmp),tmp[,2],type="b",ylab="Number",xlab="Month",main="")
+        #abline(v=c(12,24,36),col=2,lty=2,lwd=2)
+        x<-as.vector(tmp[,2])/1000
+        #GM11(x,length(x)+2)
+        stsr <- HoltWinters(ts(x,frequency = 12),gamma=FALSE)
+        plot(1:length(x), x, type="b", col=1,ylab="Number",xlab="Month",main="")
+        lines(1:length(x), c(x[1:2], stsr$fitted[,"xhat"]), type="b", col=2)
+        abline(v=c(12,24,36),col=2,lty=2,lwd=2)
+}
+
+kehu <- read.delim("../kehu.txt")
+top10kehu <- kehu[match(top10pta,kehu[,1]), ]
