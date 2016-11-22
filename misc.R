@@ -107,9 +107,10 @@ PriceIndByIn <- function(data0, dkehuList, Prods, plot=FALSE){
 GetCustomerDisByProduct <- function(data0, Prods){
         
         data0 <- data0[data0[,"金额"] > 0, ]  ## del zero money orders
-        data0[,"金额"] <- log(data0[,"金额"])
+        #data0[,"金额"] <- log(data0[,"金额"])
         
         dkehuList <- list()
+        fkehuList <- list()
         for(i in 1:length(Prods)){
                 tmp <- data0[grepl(Prods[i],data0[,"品种"]), ]
                 kehus <- unique(tmp[,"客户"])
@@ -124,18 +125,20 @@ GetCustomerDisByProduct <- function(data0, Prods){
                         oneV[match(rowMon,oneV[,1]),2]
                 })
                 
+                feaKehu <- log(feaKehu) 
+                feaKehu[is.na(feaKehu)] <- 0
+                #print(sum(is.na(feaKehu))/(length(feaKehu)))
+                feaKehu[feaKehu < 0] <- 0
                 colnames(feaKehu) <- kehus
                 rownames(feaKehu) <- rowMon
-                print(sum(is.na(feaKehu))/(length(feaKehu)))
-                feaKehu[is.na(feaKehu)] <- 0
-                
                 dkehu <- as.matrix(dist(t(feaKehu)))
                 
                 dkehuList[[i]] <- dkehu
+                fkehuList[[i]] <- feaKehu
         }
         
         #save(dkehuList,file="distanceCustomer_V2")  
-        dkehuList
+        list(dkehuList=dkehuList,fkehuList=fkehuList)
         
 }
 
@@ -177,17 +180,11 @@ productLevel <- function(data0){
         tmp
 }
 
-GetFeatureM <- function(data0, Prods, di=1){
+GetFeatureM <- function(data0, Prods, di="month"){
         ## di: 0 week; 1 month; 2 season
         
         useDates <- as.Date(data0[,"日期"])
-        if(di==0){
-                useMon <- paste(year(useDates),week(useDates),sep="-")
-        }else if(di==1){
-                useMon <- paste(year(useDates),month(useDates),sep="-")
-        }else if(di==2){
-                useMon <- paste(year(useDates),quarter(useDates),sep="-")        
-        }
+        useMon <- dateGroup(useDates, di=di)
         rowMon  <- unique(useMon)
         
         data0[,"金额"] <- log(data0[,"金额"])
@@ -201,14 +198,7 @@ GetFeatureM <- function(data0, Prods, di=1){
                 tmp <- data0[grepl(Prods[i],data0[,"品种"]), ]
                 kehus <- unique(tmp[,"客户"])
                 useDates <- as.Date(tmp[,"日期"])
-                
-                if(di==0){
-                        useMon <- paste(year(useDates),week(useDates),sep="-")
-                }else if(di==1){
-                        useMon <- paste(year(useDates),month(useDates),sep="-")
-                }else if(di==2){
-                        useMon <- paste(year(useDates),quarter(useDates),sep="-")        
-                }
+                useMon <- dateGroup(useDates, di=di)
                 
                 feaKehu <- sapply(1:length(kehus), function(kk){
                         onesub <- tmp[,"客户"]==kehus[kk]
@@ -227,7 +217,7 @@ GetFeatureM <- function(data0, Prods, di=1){
         feaM
 }
 
-GetDistanceM <- function(data0, Prods, di=1){
+GetDistanceM <- function(data0, Prods, di="month"){
       
         feaM <- GetFeatureM(data0, Prods, di=di)
         oneD <- dist(feaM)
@@ -274,7 +264,7 @@ quantileCluster <- function(feaM,nc=5){
         cluS1
 }
 
-PriceIndSumUp <- function(data1, PrV, Prods, plot=FALSE){
+PriceIndSumUp <- function(data1, PrV, Prods, di="week", plot=FALSE){
         
         usedate <- rownames(PrV)
         outIndDay <- list()
@@ -287,7 +277,7 @@ PriceIndSumUp <- function(data1, PrV, Prods, plot=FALSE){
                 prInd[nasub] <- mean(prInd[!nasub])
                 
                 useDates <- as.Date(tmp[,"日期"])
-                useDay <- paste(year(useDates),week(useDates),sep="-") #useDates
+                useDay <- dateGroup(useDates, di=di) 
                 
                 oneV <- aggregate(prInd,list(useDay), mean)
                 rownames(oneV) <- useDates[match(oneV[,1], useDay)]
@@ -307,17 +297,107 @@ PriceIndSumUp <- function(data1, PrV, Prods, plot=FALSE){
         outIndDay
 }
 
-BestPriceInd <- function(data1, Prod, oneV, nweek=100, plot=FALSE){
-        
+BestPriceInd <- function(data1, Prod, oneV, di="week", nx=nx, plot=FALSE){
+       
         tmp <- data1[grepl(Prod,data1[,"品种"]), ]
         useDates <- as.Date(tmp[,"日期"])
-        useDay <- paste(year(useDates),week(useDates),sep="-") #useDates
+        useDay <- dateGroup(useDates, di=di)
+        
         twoV <- aggregate(tmp[,"金额"],list(useDay), sum)
         rownames(twoV) <- useDates[match(twoV[,1], useDay)]
         twoV <- twoV[order(as.Date(rownames(twoV))), ]
         
-        a1 <- oneV[max(1, nrow(oneV)-nweek+1):nrow(oneV),2] 
-        b1 <- twoV[max(1, nrow(twoV)-nweek+1):nrow(twoV),2]
+        x <- oneV[,2]
+        xnew <- moveMean(x, nx=nx)
+
+        # minL <- 100
+        # maxL <- 100
+        # 
+        # errV <- rep(Inf,maxL-minL+1)
+        n <- length(xnew)
+        # for(i in minL:maxL){
+        #         tmp <- sapply((i+1):n, function(ii){
+        #                 a1 <- oneV[(ii-i):(ii-1), 2] 
+        #                 b1 <- twoV[(ii-i):(ii-1), 2]
+        #                 chip <- PmaxDelta(a1, b1)[1]
+        #                 (chip - xnew[ii])      
+        #                 })
+        #         errV[i-minL+1] <- sum(abs(tmp))/(n-i)
+        # }
+        # 
+        # nbest <- min(which(errV==min(errV))) + minL - 1
+        nbest <- 2
+        xp <- sapply( (nbest+1):n, function(ii) {
+                if(di=="week"){
+                        a1 <- oneV[max(1,ii-80):(ii-1), 2] 
+                        b1 <- twoV[max(1,ii-80):(ii-1), 2]  
+                }else if(di=="day"){
+                        a1 <- oneV[max(1,ii-365):(ii-1), 2] 
+                        b1 <- twoV[max(1,ii-365):(ii-1), 2]          
+                }else{
+                        a1 <- oneV[1:(ii-1), 2] 
+                        b1 <- twoV[1:(ii-1), 2]     
+                }
+                b1 <- moveMean(b1,nx=3)
+                PmaxDelta(a1, b1)[1]
+                } )
+        xp <- c(xnew[(1:nbest)], xp)
+        
+        if(plot){
+                plot(x, type="l", main="Delta function based", xlab="Series", ylab="", col="black")
+                lines(xnew, type="l", lty=2, lwd=2, col="red")
+                lines(xp, type="l", lty=2, lwd=2, col="blue")
+                legend("topleft",legend=c("origin","Known","Predict"), col=c("black","red","blue"), lwd=c(1,2,2), lty=c(1,2,2))
+        }
+        
+        list(nbest=nbest, predpair= cbind(xnew,xp))
+        
+}
+
+Lbesterr <- function(x){
+        x <- as.numeric(x)
+        n <- length(x)
+        minL <- min(10,round(n/3))
+        maxL <- min(365,round(0.8*n))
+        
+        errV <- rep(Inf,maxL-minL+1)
+        for(i in minL:maxL){
+                tmp <- moveMean(x, nx=i)
+                errV[i-minL+1] <- abs(sum(sign(x-tmp)))
+        }
+        
+        nx <- max(which(errV==min(errV))) + minL-1
+        xnew <- moveMean(x, nx=nx)
+        
+        list(xnew=xnew, nx=nx)
+}
+
+Pbesterr <- function(x, nx, plot=FALSE){
+        x <- as.numeric(x)
+        n <- length(x)
+        xnew <- moveMean(x, nx=nx)
+
+        errV <- rep(Inf,nx-1)
+        for(i in 1:(nx-1)){
+                tmp <- sapply((i+1):n, function(ii) mean(x[(ii-i):(ii-1)])-xnew[ii] )
+                errV[i] <- sum(abs(tmp))/(n-i)
+        }
+        
+        nbest <- min(which(errV==min(errV)))
+        xp <- sapply( (nbest+1):n, function(ii) mean(x[(ii-nbest):(ii-1)]) )
+        xp <- c(xnew[(1:nbest)], xp)
+        
+        if(plot){
+                plot(x, type="l", main="moving mean based", xlab="Series", ylab="", col="black")
+                lines(xnew, type="l", lty=2, lwd=2, col="red")
+                lines(xp, type="l", lty=2, lwd=2, col="blue")
+                legend("topleft",legend=c("origin","Known","Predict"), col=c("black","red","blue"), lwd=c(1,2,2), lty=c(1,2,2))
+        }
+        
+        list(nbest=nbest, predpair= cbind(xnew,xp))
+}
+
+PmaxDelta <- function(a1, b1, plot=FALSE){
         
         a2 <- diff(a1)  ## delta price index
         b2 <- diff(log(b1)) ## delta log sale-money
@@ -329,13 +409,107 @@ BestPriceInd <- function(data1, Prod, oneV, nweek=100, plot=FALSE){
         x1 <- a1[asub]
         y1 <- y[asub]
         chpi <- x1[which.max(y1)]
+        #chpi <- x1[which.max(abs(y1))]
         sdi <- sd(x1)
         ui <- chpi + sdi
         di <- chpi - sdi
         b0 <- mean(x1)
         
-        c(chpi,ui,di,b0)
+        res <- c(chpi,ui,di,b0)
+        
+        res
 }
+
+largeCusAna <- function(feaOne, pcut=0.9){
+        ys <- rownames(feaOne)
+        ys <- sapply(1:nrow(feaOne), function(ii) unlist(strsplit(ys[ii],"-"))[1] )
+        uys <- as.character(sort(as.numeric(unique(ys))))
+        ny <- length(uys)
+        nk <- ncol(feaOne)
+        kehus <- colnames(feaOne)
+        
+        numAuck <- matrix(0,2*ny,nk)
+        namesk <- matrix(0,ny,nk)
+        
+        for(i in 1:ny){
+                tmp <- feaOne[ys==uys[i], ]
+                numk <- colSums(tmp)
+                numtmp <- sort(numk, decreasing = TRUE, index.return = TRUE)
+                numk <- numtmp$x
+                numord <- numtmp$ix
+                tomk <- sum(numk)
+                acuk <- sapply(1:length(numk), function(ii) sum(numk[1:ii]))
+                acuk <- acuk/tomk
+                
+                numAuck[i, ] <- numk
+                numAuck[i+ny, ] <- acuk
+                namesk[i, ] <- kehus[numord]
+        }
+        
+        cRate <- 1:(ny-1)
+        for(i in 1:(ny-1)){
+               nsub1 <- which(numAuck[i+ny,] > pcut)[1]
+               nsub2 <- which(numAuck[i+1+ny,] > pcut)[1]
+               cRate[i] <- length(setdiff(namesk[i, 1:nsub1], namesk[i+1, 1:nsub2]))/nsub1
+        }
+        
+        list(numAuck=numAuck, namesk=namesk, cRate=cRate)
+}
+
+CustomerClu <- function(feaOne, namesk, ntop=40, sigc=0.02, plot=FALSE){
+        
+        ys <- rownames(feaOne)
+        ys <- sapply(1:nrow(feaOne), function(ii) unlist(strsplit(ys[ii],"-"))[1] )
+        uys <- as.character(sort(as.numeric(unique(ys))))
+        ny <- length(uys)
+        nk <- ncol(feaOne)
+        nm <- nrow(feaOne)
+        kehus <- colnames(feaOne)
+        
+        
+        ## 流失的主力客户
+        Lks <- setdiff(namesk[1, 1:ntop], union(namesk[2, 1:ntop], namesk[3, 1:ntop]))
+        
+        ## 新增的主力客户
+        Nks <- setdiff(namesk[3, 1:ntop], union(namesk[1, 1:ntop], namesk[2, 1:ntop]))
+        
+        ## 上升的主力客户 and ## 下降的主力客户
+        feaOneNew <- sapply(1:nk, function(ii) moveMean(feaOne[,ii],10) )
+        difffea <- sapply(1:nk, function(ii) diff(feaOneNew[,ii],1) )
+        #sigF <- sapply(1:nk, function(ii) sum(difffea[,ii] > 0) )
+        #sigF <- sigF/nm
+        sigF <- sapply(1:nk, function(ii){
+                if(sum(feaOne[,ii] > 0) >= 3){
+                        GM11(as.vector(feaOne[,ii])/10000,nm)$a;
+                }else{ 0;} 
+                })
+        
+        if(plot){
+                plot(density(sigF),main="",xlab="",ylab="")
+                abline(v=sigc,col=2,lty=2,lwd=2)
+                abline(v=-sigc,col=2,lty=2,lwd=2)
+                print( sum(abs(sigF) <= sigc)/nk )
+                }
+        
+        numV <- colSums(feaOne)
+        numtmp <- sort(numV, decreasing = TRUE, index.return = TRUE)
+        maincus <- kehus[numtmp$ix[1:ntop]]
+        Upks <- intersect(maincus, kehus[sigF >= sigc])
+        Doks <- intersect(maincus, kehus[sigF <= - sigc])
+        
+        ## 稳定的主力客户 and ## 波动的主力客户
+        waveF <- sapply(1:nk, function(ii) sd(feaOneNew[,ii])/mean(feaOneNew[,ii]) )
+        Wks <- intersect(maincus, kehus[waveF < max(quantile(waveF, 0.2), 1) ])
+        Bks <- intersect(maincus, kehus[waveF > max(quantile(waveF, 0.7), 2) ])
+        
+        ## 潜在的主力客户挖掘
+        Qks <- intersect(kehus[waveF < max(quantile(waveF, 0.2), 1) ], kehus[sigF > sigc])
+        Qks <- setdiff(Qks, maincus)
+        
+        
+        list(Lks=Lks, Nks=Nks, Upks=Upks, Doks=Doks, Wks=Wks, Bks=Bks, Qks=Qks)
+}
+
 
 
 ## useful functions
@@ -516,4 +690,28 @@ stackedBarplot <- function(barData){
 
 }
 
+moveMean <- function(x, nx=60){
+        n <- length(x)
+        y <- rep(0,n)
+        for(i in 1:n) y[i] <- mean(x[max(1,i-round(nx/2)) : min(n,i+round(nx/2))])
+        
+        y
+}
+
+dateGroup <- function(useDates, di="week"){
+        
+        if(di=="day"){
+                useg <- useDates
+        }else if(di=="week"){
+                useg <- paste(year(useDates),week(useDates),sep="-")
+        }else if(di=="month"){
+                useg <- paste(year(useDates),month(useDates),sep="-")
+        }else if(di=="season"){
+                useg <- paste(year(useDates),quarter(useDates),sep="-")     
+        }else if(di=="year"){
+                useg <- year(useDates)
+        }
+
+        useg
+}
 

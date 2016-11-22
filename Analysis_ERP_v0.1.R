@@ -21,7 +21,7 @@ outInd <- PriceIndByOut(data1, PrV, Prods)
 data1 <- read.delim("AllinOne.txt")
 #data1 <- read.delim("AllinOneNew.txt")
 
-dkehuList <- GetCustomerDisByProduct(data1, Prods)
+dkehuList <- GetCustomerDisByProduct(data1, Prods)$dkehuList
 inInd <- PriceIndByIn(data1, dkehuList, Prods)
 
 # s3: delete outliers based on outside price index with zero money orders and company in themselves
@@ -61,12 +61,19 @@ pcor <- sum(rdis > r1)
 ## Step 4: Price strategy based on history price index trends ======
 data1 <- read.delim("AllinOneNew.txt")
 data1 <- data1[data1[,"金额"] > 0, ]
-outIndDay <- PriceIndSumUp(data1, PrV, Prods, plot=FALSE)
 
-### best prind for hengyi and one month  
-oneV <- outIndDay[[1]]
-res <- BestPriceInd(data1, Prods[1], oneV, nweek=100)
-
+dis=c("day","week","month","season")
+for(i in 1:4){ ## time dimonsion
+        di <- dis[i]
+        outIndDay <- PriceIndSumUp(data1, PrV, Prods, di=di, plot=FALSE)
+        for(j in 1:4){ ## product
+                oneV <- outIndDay[[j]]
+                ### best history data to predict price index in future
+                nx <- Lbesterr(oneV[,2])$nx
+                res1 <- BestPriceInd(data1, Prods[j], oneV, di=di, nx=nx, plot=TRUE)
+                res2 <- Pbesterr(oneV[,2], nx, plot=TRUE)
+        }
+}
 
 ## Step 5: Pay methods =======
 data0 <- read.delim("AllinOne.txt")
@@ -227,3 +234,35 @@ abline(v=chp,col=2,lwd=2,lty=2)
 barplot(t(cbind(yr,1-yr)), main="旧客户 VS 新客户",
         xlab="", col=c("darkblue","red"),
         legend = c("Old", "New"), args.legend = list(x="bottomleft"))
+
+
+## Step 10: customer distribution =======
+data0 <- read.delim("AllinOneNew.txt")
+Prods <- c("PTA","DTY","FDY","POY")
+feaM <- GetCustomerDisByProduct(data0, Prods)$fkehuList
+
+for(i in 1:length(feaM)){
+        
+        tmp <- exp(feaM[[i]])
+        tmp[feaM[[i]]==0] <- 0
+        aa <- largeCusAna(tmp)
+        nk <- ncol(tmp)
+        bb <- CustomerClu(tmp, aa$namesk,ntop=round(nk*0.35), plot=TRUE)
+        print(bb)
+        
+        # numtmp <- aa$numAuck
+        # for(j in 5:8){
+        #         x <- numtmp[j, ]
+        #         plot((1:ncol(numtmp))/ncol(numtmp),x, type="l", main="Accumlation Sale", xlab="Number of customers", ylab="Fractions")
+        #         abline(h=0.9,lwd=2,lty=2,col=2)
+        #         abline(v=which(x>0.9)[1]/ncol(numtmp),lwd=2,lty=2,col=2)
+        #         print(which(x>0.9)[1])
+        # }
+}
+
+onek <- "321419"
+onesub <- which(colnames(tmp)==onek)
+plot(tmp[,onesub],type="b",main=onek, xlab="",ylab="", xaxt="n")
+ymax <- max(tmp[,onesub])
+ymin <- min(tmp[,onesub])
+text(x=c(6.5,18.5,30.5,37.5), par("usr")[3]-0.035*(ymax-ymin), labels = 2013:2016, srt = 0, pos = 1, xpd = TRUE)
